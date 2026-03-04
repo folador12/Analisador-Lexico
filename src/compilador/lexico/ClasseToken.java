@@ -1,7 +1,5 @@
 package compilador.lexico;
 
 public enum ClasseToken {
-    Identificador,
-    Inteiro,
-    EOF // identificador de arquivo
+    Identificador, Inteiro, PalavraReservada, EOF // identificador de arquivo
 }
