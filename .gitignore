@@ -1,3 +1,2 @@
-bin
-
-.pas
+bin/
+*.pas
