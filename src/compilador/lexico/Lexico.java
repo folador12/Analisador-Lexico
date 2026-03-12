@@ -14,7 +14,8 @@ public class Lexico {
     private char caractere;
     private static final List<String> palavrasReservadas = Arrays.asList("const", "type", "var",
             "begin", "end", "while", "do", "for", "downto", "if", "then", "else", "case", "of",
-            "array", "function", "procedure", "label", "record", "exit", "break", "continue");
+            "array", "function", "procedure", "label", "record", "exit", "break", "continue", "and",
+            "or", "not", "integer", "program", "write", "writeln", "read", "repeat", "until");
     private int linha = 1;
     private int coluna = 1;
 
