@@ -1,18 +1,12 @@
 package compilador;
 
-import compilador.lexico.ClasseToken;
-import compilador.lexico.Lexico;
-import compilador.lexico.Token;
+import compilador.sintatico.Sintatico;
 
 public class App {
     public static void main(String[] args) throws Exception {
-        Lexico lexico = new Lexico("data/programa1.pas");
-        Token token = lexico.getNexToken();
-
-        while (token.getClasse() != ClasseToken.EOF) {
-            System.out.println(token);
-            token = lexico.getNexToken();
-        }
-        System.out.println(token);
+        String arquivo = (args.length > 0) ? args[0] : "data/programa2.pas";
+        Sintatico sintatico = new Sintatico(arquivo);
+        sintatico.analisar();
+        System.out.println("Compilação concluída. Arquivo gerado: queronemver.asm");
     }
 }
