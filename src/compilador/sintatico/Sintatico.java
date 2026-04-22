@@ -29,14 +29,6 @@ public class Sintatico {
     private List<String> variaveis = new ArrayList<>();
     private List<String> sectionData = new ArrayList<>();
     private Registro registro;
-    private String rotuloElse;
-
-    // --- campos para suporte a procedimentos/funções (partes amarelas) ---
-    private int nivel = 0;
-    private int maxNivel = 0;
-    private int tamanhoLocais = 0;
-    private List<String> parametrosAtual = new ArrayList<>();
-    private Registro registroCorpo = null;
 
     public Sintatico(String nomeArquivo) {
         lexico = new Lexico(nomeArquivo);
@@ -73,18 +65,6 @@ public class Sintatico {
         String retorno = "rotulo" + texto + contRotulo;
         contRotulo++;
         return retorno;
-    }
-
-    /**
-     * Retorna o endereço de memória de um registro.
-     * Variáveis locais: [ebp - offset] (offset positivo, abaixo do EBP).
-     * Parâmetros e valor de retorno de função: [ebp + offset] (offset positivo, acima do EBP).
-     */
-    private String enderecoVariavel(Registro reg) {
-        if (reg.getCategoria() == Categoria.PARAMETRO || reg.getCategoria() == Categoria.FUNCAO) {
-            return "[ebp + " + reg.getOffset() + "]";
-        }
-        return "[ebp - " + reg.getOffset() + "]";
     }
 
     private void avanca() {
@@ -164,9 +144,6 @@ public class Sintatico {
         // {A45}
         escreverCodigo("\tleave");
         escreverCodigo("\tret");
-        if (maxNivel > 0) {
-            sectionData.add("display: times " + maxNivel + " dd 0");
-        }
         if (!sectionData.isEmpty()) {
             escreverCodigo("\nsection .data\n");
             for (String mensagem : sectionData) {
@@ -183,49 +160,13 @@ public class Sintatico {
 
     // <corpo> ::= <declara> <rotina> {A44} begin <sentencas> end {A46}
     private void corpo() {
-        tamanhoLocais = 0;   // zera para acumular locais desta scope
         declara();
-
-        // Para o programa principal (nivel == 0), emite um JMP para pular as definições
-        // de procedimentos/funções que ficam entre o prólogo e o corpo principal.
-        String rotuloCorpoInicio = null;
-        if (nivel == 0) {
-            rotuloCorpoInicio = criarRotulo("InicioCorpo");
-            escreverCodigo("\tjmp " + rotuloCorpoInicio);
-        }
-
         rotina();
-
-        // {A44} — somente para procedimentos/funções (nivel > 0)
-        if (nivel > 0 && registroCorpo != null) {
-            rotulo = registroCorpo.getRotulo();
-            escreverCodigo("\tpush ebp");
-            escreverCodigo("\tpush dword[display + " + ((nivel - 1) * TAMANHO_INTEIRO) + "]");
-            escreverCodigo("\tmov ebp, esp");
-            escreverCodigo("\tmov dword[display + " + ((nivel - 1) * TAMANHO_INTEIRO) + "], ebp");
-            if (tamanhoLocais > 0) {
-                escreverCodigo("\tsub esp, " + tamanhoLocais);
-            }
-        }
-
-        // Aplica o rótulo de início do corpo principal (pula procedimentos/funções)
-        if (rotuloCorpoInicio != null) {
-            rotulo = rotuloCorpoInicio;
-        }
-
+        // {A44} - skipped (yellow / procedures not implemented)
         consomeKeyword("begin");
         sentencas();
         consomeKeyword("end");
-
-        // {A46} — somente para procedimentos/funções (nivel > 0)
-        if (nivel > 0) {
-            if (tamanhoLocais > 0) {
-                escreverCodigo("\tadd esp, " + tamanhoLocais);
-            }
-            escreverCodigo("\tpop dword[display + " + ((nivel - 1) * TAMANHO_INTEIRO) + "]");
-            escreverCodigo("\tpop ebp");
-            escreverCodigo("\tret");
-        }
+        // {A46} - skipped (yellow)
     }
 
     // <declara> ::= var <dvar> <mais_dc> | ε
@@ -265,12 +206,7 @@ public class Sintatico {
             tabela.get(var).setTipo(Tipo.INTEGER);
             tamanho += TAMANHO_INTEIRO;
         }
-        tamanhoLocais += tamanho;
-        if (nivel == 0) {
-            // programa principal: cabeçalho já foi gerado em A01, apenas emite sub esp
-            escreverCodigo("\tsub esp, " + tamanho);
-        }
-        // para procedimentos/funções (nivel > 0), A44 gerará o sub esp com tamanhoLocais
+        escreverCodigo("\tsub esp, " + tamanho);
         variaveis.clear();
     }
 
@@ -309,212 +245,10 @@ public class Sintatico {
         }
     }
 
-    // -----------------------------------------------------------------------
-    // Rotina (partes amarelas: procedimentos e funções)
-    // -----------------------------------------------------------------------
-
-    // <rotina> ::= <procedimento> | <funcao> | ε
+    // <rotina> ::= ε  (procedimentos/funções não implementados - marcados em amarelo)
     private void rotina() {
-        if (isKeyword("procedure")) {
-            procedimento();
-        } else if (isKeyword("function")) {
-            funcao();
-        }
+        // yellow - not implemented
     }
-
-    // <procedimento> ::= procedure id {A04} <parametros> {A48} ; <corpo> {A56} ; <rotina>
-    private void procedimento() {
-        consomeKeyword("procedure");
-
-        if (token.getClasse() != ClasseToken.Identificador) {
-            erro("Esperado identificador após 'procedure'");
-        }
-
-        // {A04}
-        String nomeProcedimento = token.getValor().getTexto();
-        if (tabela.isPresent(nomeProcedimento)) {
-            System.err.println("Identificador '" + nomeProcedimento + "' já foi declarado anteriormente");
-            System.exit(-1);
-        }
-        nivel++;
-        if (nivel > maxNivel) maxNivel = nivel;
-        Registro regProc = tabela.add(nomeProcedimento);
-        regProc.setCategoria(Categoria.PROCEDIMENTO);
-        regProc.setNivel(nivel);
-        regProc.setRotulo(nomeProcedimento);
-        avanca();
-
-        // nova tabela de símbolos para o escopo do procedimento
-        TabelaSimbolos tabelaAnterior = tabela;
-        tabela = new TabelaSimbolos(tabelaAnterior);
-        int offsetAnterior = offsetVariavel;
-        offsetVariavel = 0;
-        int tamanhoLocaisAnterior = tamanhoLocais;
-        parametrosAtual.clear();
-
-        parametros();
-
-        // {A48}
-        int numParams = parametrosAtual.size();
-        regProc.setNumeroParametros(numParams);
-        for (int i = 0; i < numParams; i++) {
-            // offset = 12 + ((numParams - (i+1)) * TAMANHO_INTEIRO)
-            // parâmetros ficam acima do EBP: [ebp+12] = último param, [ebp+16] = penúltimo, etc.
-            int offset = 12 + ((numParams - (i + 1)) * TAMANHO_INTEIRO);
-            tabela.get(parametrosAtual.get(i)).setOffset(offset);
-        }
-
-        consome(ClasseToken.PontoVirgula);
-
-        Registro registroCorpoAnterior = registroCorpo;
-        registroCorpo = regProc;
-        corpo();
-        registroCorpo = registroCorpoAnterior;
-
-        // {A56}
-        nivel--;
-        tabela = tabelaAnterior;
-        offsetVariavel = offsetAnterior;
-        tamanhoLocais = tamanhoLocaisAnterior;
-
-        consome(ClasseToken.PontoVirgula);
-        rotina();
-    }
-
-    // <funcao> ::= function id {A05} <parametros> {A48} : <tipo_funcao> {A47} ; <corpo> {A56} ; <rotina>
-    private void funcao() {
-        consomeKeyword("function");
-
-        if (token.getClasse() != ClasseToken.Identificador) {
-            erro("Esperado identificador após 'function'");
-        }
-
-        // {A05}
-        String nomeFuncao = token.getValor().getTexto();
-        if (tabela.isPresent(nomeFuncao)) {
-            System.err.println("Identificador '" + nomeFuncao + "' já foi declarado anteriormente");
-            System.exit(-1);
-        }
-        nivel++;
-        if (nivel > maxNivel) maxNivel = nivel;
-        Registro regFunc = tabela.add(nomeFuncao);
-        regFunc.setCategoria(Categoria.FUNCAO);
-        regFunc.setNivel(nivel);
-        regFunc.setRotulo(nomeFuncao);
-        avanca();
-
-        // nova tabela de símbolos; insere a própria função para permitir atribuição do retorno
-        TabelaSimbolos tabelaAnterior = tabela;
-        tabela = new TabelaSimbolos(tabelaAnterior);
-        Registro regFuncLocal = tabela.add(nomeFuncao);
-        regFuncLocal.setCategoria(Categoria.FUNCAO);
-        regFuncLocal.setNivel(nivel);
-        regFuncLocal.setRotulo(nomeFuncao);
-
-        int offsetAnterior = offsetVariavel;
-        offsetVariavel = 0;
-        int tamanhoLocaisAnterior = tamanhoLocais;
-        parametrosAtual.clear();
-
-        parametros();
-
-        // {A48}
-        int numParams = parametrosAtual.size();
-        regFunc.setNumeroParametros(numParams);
-        regFuncLocal.setNumeroParametros(numParams);
-        for (int i = 0; i < numParams; i++) {
-            int offset = 12 + ((numParams - (i + 1)) * TAMANHO_INTEIRO);
-            tabela.get(parametrosAtual.get(i)).setOffset(offset);
-        }
-
-        consome(ClasseToken.DoisPontos);
-        tipoFuncao();
-
-        // {A47} — tipo é sempre integer; define offset do retorno
-        int offsetRetorno = 12 + numParams * TAMANHO_INTEIRO;
-        regFunc.setOffset(offsetRetorno);
-        regFuncLocal.setOffset(offsetRetorno);
-
-        consome(ClasseToken.PontoVirgula);
-
-        Registro registroCorpoAnterior = registroCorpo;
-        registroCorpo = regFunc;
-        corpo();
-        registroCorpo = registroCorpoAnterior;
-
-        // {A56}
-        nivel--;
-        tabela = tabelaAnterior;
-        offsetVariavel = offsetAnterior;
-        tamanhoLocais = tamanhoLocaisAnterior;
-
-        consome(ClasseToken.PontoVirgula);
-        rotina();
-    }
-
-    // <tipo_funcao> ::= integer
-    private void tipoFuncao() {
-        consomeKeyword("integer");
-    }
-
-    // <parametros> ::= ( <lista_parametros> ) | ε
-    private void parametros() {
-        if (token.getClasse() == ClasseToken.AbreParenteses) {
-            avanca();
-            listaParametros();
-            consome(ClasseToken.FechaParenteses);
-        }
-    }
-
-    // <lista_parametros> ::= <lista_id> : <tipo_var> {A06} <cont_lista_par>
-    private void listaParametros() {
-        listaId();
-        consome(ClasseToken.DoisPontos);
-        tipoVar();
-        // {A06} — tipo sempre integer, pode ser desprezado
-        contListaPar();
-    }
-
-    // <cont_lista_par> ::= ; <lista_parametros> | ε
-    private void contListaPar() {
-        if (token.getClasse() == ClasseToken.PontoVirgula) {
-            avanca();
-            listaParametros();
-        }
-    }
-
-    // <lista_id> ::= id {A07} <cont_lista_id>
-    private void listaId() {
-        if (token.getClasse() != ClasseToken.Identificador) {
-            erro("Esperado identificador na lista de parâmetros");
-        }
-
-        // {A07}
-        String nomeParam = token.getValor().getTexto();
-        if (tabela.isPresentLocal(nomeParam)) {
-            System.err.println("Parâmetro '" + nomeParam + "' já foi declarado anteriormente");
-            System.exit(-1);
-        }
-        Registro regParam = tabela.add(nomeParam);
-        regParam.setCategoria(Categoria.PARAMETRO);
-        regParam.setNivel(nivel);
-        parametrosAtual.add(nomeParam);
-
-        avanca();
-        contListaId();
-    }
-
-    // <cont_lista_id> ::= , <lista_id> | ε
-    private void contListaId() {
-        if (token.getClasse() == ClasseToken.Virgula) {
-            avanca();
-            listaId();
-        }
-    }
-
-    // -----------------------------------------------------------------------
-    // Sentencas e comandos
-    // -----------------------------------------------------------------------
 
     // <sentencas> ::= <comando> <mais_sentencas>
     private void sentencas() {
@@ -591,21 +325,18 @@ public class Sintatico {
             comandoIf();
 
         } else if (token.getClasse() == ClasseToken.Identificador) {
+            // lookahead: id := expressao  OR  id argumentos (chamada de procedimento)
             String nome = token.getValor().getTexto();
             avanca();
 
             if (token.getClasse() == ClasseToken.Atribuicao) {
-                // {A49} id := expressao {A22}
+                // id {A49} := expressao {A22}
                 if (!tabela.isPresent(nome)) {
                     System.err.println("Variável '" + nome + "' não foi declarada");
                     System.exit(-1);
                 }
                 registro = tabela.get(nome);
-                boolean ehFuncaoCorrente = registro.getCategoria() == Categoria.FUNCAO
-                        && registro.getNivel() == nivel;
-                if (registro.getCategoria() != Categoria.VARIAVEL
-                        && registro.getCategoria() != Categoria.PARAMETRO
-                        && !ehFuncaoCorrente) {
+                if (registro.getCategoria() != Categoria.VARIAVEL) {
                     System.err.println("O identificador '" + nome + "' não é uma variável. A49");
                     System.exit(-1);
                 }
@@ -613,10 +344,10 @@ public class Sintatico {
                 expressao();
                 // {A22}
                 escreverCodigo("\tpop eax");
-                escreverCodigo("\tmov dword" + enderecoVariavel(registro) + ", eax");
+                escreverCodigo("\tmov dword[ebp - " + registro.getOffset() + "], eax");
 
             } else {
-                // {A50} chamada de procedimento <argumentos> {A23}
+                // chamada de procedimento {A50} argumentos {A23}
                 if (!tabela.isPresent(nome)) {
                     System.err.println("Identificador '" + nome + "' não foi declarado");
                     System.exit(-1);
@@ -657,7 +388,8 @@ public class Sintatico {
             System.err.println("Identificador '" + variavel + "' não é uma variável");
             System.exit(-1);
         }
-        escreverCodigo("\tlea eax, " + enderecoVariavel(reg));
+        escreverCodigo("\tmov edx, ebp");
+        escreverCodigo("\tlea eax, [edx - " + reg.getOffset() + "]");
         escreverCodigo("\tpush eax");
         escreverCodigo("\tpush @Integer");
         escreverCodigo("\tcall scanf");
@@ -692,7 +424,7 @@ public class Sintatico {
                 System.err.println("Identificador '" + variavel + "' não é uma variável");
                 System.exit(-1);
             }
-            escreverCodigo("\tpush dword" + enderecoVariavel(reg));
+            escreverCodigo("\tpush dword[ebp - " + reg.getOffset() + "]");
             escreverCodigo("\tpush @Integer");
             escreverCodigo("\tcall printf");
             escreverCodigo("\tadd esp, 8");
@@ -762,17 +494,17 @@ public class Sintatico {
         expressao();
 
         // {A11}
-        escreverCodigo("\tpop dword" + enderecoVariavel(regFor));
+        escreverCodigo("\tpop dword[ebp - " + regFor.getOffset() + "]");
         String rotuloEntrada = criarRotulo("FOR");
         String rotuloSaida = criarRotulo("FIMFOR");
 
         consomeKeyword("to");
-        expressao(); // empilha o limite "to"
+        expressao(); // pushes the "to" limit once — stays on stack throughout the loop
 
-        // {A12}
+        // {A12} — label goes on the first instruction of A12 (push ecx), NOT on the limit push
         rotulo = rotuloEntrada;
         escreverCodigo("\tpush ecx\n"
-                + "\tmov ecx, dword" + enderecoVariavel(regFor) + "\n"
+                + "\tmov ecx, dword[ebp - " + regFor.getOffset() + "]\n"
                 + "\tcmp ecx, dword[esp+4]\n"
                 + "\tjg " + rotuloSaida + "\n"
                 + "\tpop ecx");
@@ -783,8 +515,9 @@ public class Sintatico {
         consomeKeyword("end");
 
         // {A13}
-        escreverCodigo("\tadd dword" + enderecoVariavel(regFor) + ", 1");
+        escreverCodigo("\tadd dword[ebp - " + regFor.getOffset() + "], 1");
         escreverCodigo("\tjmp " + rotuloEntrada);
+        // exit: stack has [limit, saved_ecx] — clean both
         rotulo = rotuloSaida;
         escreverCodigo("\tadd esp, 8");
     }
@@ -847,7 +580,7 @@ public class Sintatico {
         consome(ClasseToken.FechaParenteses);
 
         // {A19}
-        rotuloElse = criarRotulo("Else");
+        String rotuloElse = criarRotulo("Else");
         String rotuloFim = criarRotulo("FimIf");
         escreverCodigo("\tcmp dword[esp], 0");
         escreverCodigo("\tje " + rotuloElse);
@@ -862,18 +595,18 @@ public class Sintatico {
         escreverCodigo("\tjmp " + rotuloFim);
 
         // pfalsa with {A25}
-        pfalsa(rotuloFim);
+        pfalsa(rotuloElse, rotuloFim);
 
         // {A21}
         rotulo = rotuloFim;
     }
 
     // <pfalsa> ::= {A25} else begin sentencas end | ε
-    private void pfalsa(String rotuloFim) {
-        // {A25} — emite o rótulo do else e sempre faz pop do resultado lógico
+    private void pfalsa(String rotuloElse, String rotuloFim) {
+        // {A25} - always emit the else label
         escreverCodigo(rotuloElse + ":");
-        escreverCodigo("\tadd esp, 4"); // pop do resultado da expressao_logica (caminho falso)
         if (isKeyword("else")) {
+            escreverCodigo("\tadd esp, 4");
             avanca();
             consomeKeyword("begin");
             sentencas();
@@ -881,7 +614,10 @@ public class Sintatico {
         }
     }
 
-    // <argumentos> ::= ( <lista_arg> ) | ε   — retorna número de args empilhados
+    // <chamada_procedimento> ::= id {A50} <argumentos> {A23}
+    // (handled inline in comando())
+
+    // <argumentos> ::= ( <lista_arg> ) | ε   — returns number of args pushed
     private int argumentos() {
         if (token.getClasse() == ClasseToken.AbreParenteses) {
             avanca();
@@ -1009,32 +745,32 @@ public class Sintatico {
         if (token.getClasse() == ClasseToken.Igualdade) {
             avanca();
             expressao();
-            geraRelacional("jne"); // {A31}
+            geraRelacional("jne"); // {A31} igualdade
 
         } else if (token.getClasse() == ClasseToken.Maior) {
             avanca();
             expressao();
-            geraRelacional("jle"); // {A32}
+            geraRelacional("jle"); // {A32} maior
 
         } else if (token.getClasse() == ClasseToken.MaiorIgual) {
             avanca();
             expressao();
-            geraRelacional("jl"); // {A33}
+            geraRelacional("jl"); // {A33} maior ou igual
 
         } else if (token.getClasse() == ClasseToken.Menor) {
             avanca();
             expressao();
-            geraRelacional("jge"); // {A34}
+            geraRelacional("jge"); // {A34} menor
 
         } else if (token.getClasse() == ClasseToken.MenorIgual) {
             avanca();
             expressao();
-            geraRelacional("jg"); // {A35}
+            geraRelacional("jg"); // {A35} menor ou igual
 
         } else if (token.getClasse() == ClasseToken.Diferente) {
             avanca();
             expressao();
-            geraRelacional("je"); // {A36}
+            geraRelacional("je"); // {A36} diferente
 
         } else {
             erro("Operador relacional esperado");
@@ -1123,23 +859,24 @@ public class Sintatico {
                     System.exit(-1);
                 }
                 Registro regFunc = tabela.get(nome);
+                if (regFunc.getCategoria() == Categoria.FUNCAO) {
+                    escreverCodigo("\tsub esp, 4"); // {A60} - space for return value
+                }
+                int numArgs = argumentos();
+                // {A42}
                 if (regFunc.getCategoria() != Categoria.FUNCAO) {
                     System.err.println("Identificador '" + nome + "' não é uma função. A42");
                     System.exit(-1);
                 }
-                escreverCodigo("\tsub esp, 4"); // {A60} — espaço para valor de retorno
-                int numArgs = argumentos();
-                // {A42}
                 if (numArgs != regFunc.getNumeroParametros()) {
                     System.err.println("Número de argumentos insuficiente para '" + nome + "'");
                     System.exit(-1);
                 }
                 escreverCodigo("\tcall " + regFunc.getRotulo());
                 escreverCodigo("\tadd esp, " + (numArgs * TAMANHO_INTEIRO));
-                // valor de retorno permanece no topo da pilha (o slot alocado com sub esp, 4)
 
             } else {
-                // id {A55} — variável ou parâmetro
+                // id {A55} — variável
                 if (!tabela.isPresent(nome)) {
                     System.err.println("Variável '" + nome + "' não foi declarada");
                     System.exit(-1);
@@ -1149,7 +886,7 @@ public class Sintatico {
                     System.err.println("O identificador '" + nome + "' não é uma variável. A55");
                     System.exit(-1);
                 }
-                escreverCodigo("\tpush dword" + enderecoVariavel(reg));
+                escreverCodigo("\tpush dword[ebp - " + reg.getOffset() + "]");
             }
 
         } else if (token.getClasse() == ClasseToken.Inteiro) {
