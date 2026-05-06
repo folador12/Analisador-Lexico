@@ -104,13 +104,13 @@ public class Lexico {
                     while (caractere != '\'') {
                         if (caractere == '\n') {
                             throw new RuntimeException(
-                                "Erro léxico [" + linhaInicio + ":" + colunaInicio + "]: " +
-                                "string não fechada (quebra de linha na linha " + linha + ")");
+                                    "Erro léxico [" + linhaInicio + ":" + colunaInicio + "]: "
+                                            + "string não fechada (quebra de linha na linha "
+                                            + linha + ")");
                         }
                         if (caractere == EOF_CHAR) {
-                            throw new RuntimeException(
-                                "Erro léxico [" + linhaInicio + ":" + colunaInicio + "]: " +
-                                "string não fechada (fim de arquivo)");
+                            throw new RuntimeException("Erro léxico [" + linhaInicio + ":"
+                                    + colunaInicio + "]: " + "string não fechada (fim de arquivo)");
                         }
                         lexema.append(caractere);
                         avanca();
@@ -143,8 +143,8 @@ public class Lexico {
                     while (caractere != '}') {
                         if (caractere == EOF_CHAR) {
                             throw new RuntimeException(
-                                "Erro léxico [" + linhaInicio + ":" + colunaInicio + "]: " +
-                                "comentário em bloco não fechado (fim de arquivo)");
+                                    "Erro léxico [" + linhaInicio + ":" + colunaInicio + "]: "
+                                            + "comentário em bloco não fechado (fim de arquivo)");
                         }
                         avancaComNewline();
                     }
@@ -161,9 +161,9 @@ public class Lexico {
                         avanca(); // consome o '*' de abertura
                         while (true) {
                             if (caractere == EOF_CHAR) {
-                                throw new RuntimeException(
-                                    "Erro léxico [" + linhaInicio + ":" + colunaInicio + "]: " +
-                                    "comentário em bloco não fechado (fim de arquivo)");
+                                throw new RuntimeException("Erro léxico [" + linhaInicio + ":"
+                                        + colunaInicio + "]: "
+                                        + "comentário em bloco não fechado (fim de arquivo)");
                             }
                             if (caractere == '*') {
                                 avanca(); // consome o '*' candidato ao fechamento
@@ -260,9 +260,8 @@ public class Lexico {
 
                 } else {
                     // Caractere não reconhecido: erro léxico
-                    throw new RuntimeException(
-                        "Erro léxico [" + linha + ":" + coluna + "]: " +
-                        "caractere inválido '" + caractere + "'");
+                    throw new RuntimeException("Erro léxico [" + linha + ":" + coluna + "]: "
+                            + "caractere inválido '" + caractere + "'");
                 }
             }
 

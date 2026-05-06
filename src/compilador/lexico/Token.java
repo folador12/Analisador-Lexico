@@ -6,7 +6,7 @@ public class Token {
     private ValorToken valor;
     private int linha;
     private int coluna;
-    
+
     public Token(int linha, int coluna) {
         this.linha = linha;
         this.coluna = coluna;
@@ -46,8 +46,9 @@ public class Token {
 
     @Override
     public String toString() {
-        return "Token [linha=" + linha + ", coluna=" + coluna + ", classe=" + classe + ((valor != null) ? ", valor=" + valor : "") + "]";
+        return "Token [linha=" + linha + ", coluna=" + coluna + ", classe=" + classe
+                + ((valor != null) ? ", valor=" + valor : "") + "]";
     }
 
-    
+
 }

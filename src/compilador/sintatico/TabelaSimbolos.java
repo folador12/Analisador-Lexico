@@ -6,6 +6,7 @@ import java.util.Map;
 public class TabelaSimbolos {
 
     private Map<String, Registro> tabela = new LinkedHashMap<>();
+
     public TabelaSimbolos tabelaPai;
 
     public TabelaSimbolos() {
@@ -24,14 +25,18 @@ public class TabelaSimbolos {
 
     public Registro get(String nome) {
         Registro r = tabela.get(nome.toLowerCase());
-        if (r != null) return r;
-        if (tabelaPai != null) return tabelaPai.get(nome);
+        if (r != null)
+            return r;
+        if (tabelaPai != null)
+            return tabelaPai.get(nome);
         return null;
     }
 
     public boolean isPresent(String nome) {
-        if (tabela.containsKey(nome.toLowerCase())) return true;
-        if (tabelaPai != null) return tabelaPai.isPresent(nome);
+        if (tabela.containsKey(nome.toLowerCase()))
+            return true;
+        if (tabelaPai != null)
+            return tabelaPai.isPresent(nome);
         return false;
     }
 

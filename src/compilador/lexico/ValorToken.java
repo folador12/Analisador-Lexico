@@ -24,7 +24,7 @@ public class ValorToken {
     public String getTexto() {
         return texto;
     }
-    
+
     public void setTexto(String texto) {
         this.texto = texto;
     }
@@ -33,5 +33,5 @@ public class ValorToken {
     public String toString() {
         return "ValorToken [" + ((texto != null) ? "texto=" + texto : "inteiro=" + inteiro) + "]";
     }
-    
+
 }
